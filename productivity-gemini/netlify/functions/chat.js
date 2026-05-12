@@ -3,7 +3,7 @@ export const handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return {
       statusCode: 500,
@@ -14,7 +14,6 @@ export const handler = async (event) => {
   try {
     const { messages } = JSON.parse(event.body);
 
-    // Convert messages to Gemini format
     const systemPrompt = `You are a daily productivity assistant. Keep all answers SHORT and PRACTICAL (2-5 sentences max).
 
 Your tasks:
@@ -30,29 +29,22 @@ Formatting rules:
 - Never write long paragraphs
 - Always end with an actionable suggestion`;
 
-    // Gemini uses "contents" array with "parts"
-    const contents = messages.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemPrompt }],
-          },
-          contents,
-          generationConfig: {
-            maxOutputTokens: 1000,
-            temperature: 0.7,
-          },
-        }),
-      }
-    );
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama3-8b-8192",
+        max_tokens: 1000,
+        temperature: 0.7,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ],
+      }),
+    });
 
     const data = await response.json();
 
@@ -63,7 +55,7 @@ Formatting rules:
       };
     }
 
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, no response.";
+    const reply = data.choices?.[0]?.message?.content || "Sorry, no response.";
 
     return {
       statusCode: 200,
